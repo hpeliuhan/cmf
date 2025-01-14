@@ -36,6 +36,8 @@ def main():
 
     temp_folder = "temp"  
     pipeline_name=generate_random_string()
+    with open("pipeline_name.txt", "w") as file:
+        file.write(pipeline_name)
     graph_env = os.getenv("NEO4J", "False")
     graph = True if graph_env == "True" or graph_env == "TRUE" else False
     metawriter = cmf.Cmf(filepath=pipeline_name, pipeline_name=pipeline_name, graph=graph)
@@ -56,28 +58,30 @@ def main():
                 output_dir=create_artifacts(temp_folder, args.artifact_size)
                 _ = metawriter.log_dataset(input_dir, "input")
                 _ = metawriter.log_dataset(output_dir, "output")
+    
+    '''
     log_dir = "/app/timing_results"
     os.makedirs(log_dir, exist_ok=True)
     log_file_path = os.path.join(log_dir, "timing_results.log")
 
     start_time = time.time()
     cmf.artifact_push(pipeline_name, pipeline_name)
-    end_time = time.time()
-    artifact_push_time = end_time - start_time
+    #end_time = time.time()
+    artifact_push_time = time.time() - start_time
 
     print(f"artifact_push execution time: {artifact_push_time} seconds")
 
     # Measure and log the time for metadata_push
     start_time = time.time()
     cmf.metadata_push(pipeline_name, pipeline_name)
-    end_time = time.time()
-    metadata_push_time = end_time - start_time
+    #end_time = time.time()
+    metadata_push_time = time.time() - start_time
 
     print(f"metadata_push execution time: {metadata_push_time} seconds")        
     with open(log_file_path, "a") as log_file:
         log_file.write(f"artifact_push execution time: {artifact_push_time} seconds\n")
         log_file.write(f"metadata_push execution time: {metadata_push_time} seconds\n")
-
+    '''
     
 
 

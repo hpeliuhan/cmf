@@ -1,7 +1,5 @@
-benchmark:
-  size_artifact: 1 #10MB
-  no_artifact: 2
-  no_excution: 2
-  no_stages: 2
-  no_pipeline: 2
-  client_deployment_name: "cmf-client-deployment"
+no_artifacts: 6
+no_executions: 4
+no_pipelines: 50
+no_stages: 4
+size_artifact: 100

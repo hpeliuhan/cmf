@@ -1,0 +1,18 @@
+client_cluster:
+  client_cluster_config_path: k3s-client.yaml
+  name_space: default
+  app_name: cmf-client
+  client_deployment_name: cmf-client-deployment
+#input the cmf and minio IP here
+server_cluster:
+  minio:
+    endpoint: :9000
+    access_key: minioadmin
+    secret_key: minioadmin
+    bucket_name: dvc-art
+
+  server:
+    host: 
+    username: root
+    password: ubuntu
+    remote_path: /mnt/k3s-raid/cmf/data/mlmd
