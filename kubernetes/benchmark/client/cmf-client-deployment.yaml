@@ -15,4 +15,12 @@ spec:
       containers:
       - name: cmf-client
         image: localhost:5000/cmf-client:latest
+        volumeMounts:
+        - mountPath: "/app"  # Inside container mount path
+          name: dvc-repo
+      volumes:
+      - name: dvc-repo
+        emptyDir: {}
+      nodeSelector:
+        role: benchmark
 

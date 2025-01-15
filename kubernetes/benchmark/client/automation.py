@@ -8,12 +8,73 @@ from benchmark import *
 
 
 def generate_workload_configuration(workload: str):
+    if workload == 'full_test_case_pipelines':
+        pipelines = np.array([20,40,60,80,100])
+        stages = np.array([4])
+        executions = np.array([4])
+        artifacts = np.array([6])
+        artifact_sizes = np.array([60])
+
+
+    if workload == 'full_test_case_stages':
+        pipelines = np.array([60])
+        stages = np.array([2,3,4,5,6])
+        executions = np.array([4])
+        artifacts = np.array([6])
+        artifact_sizes = np.array([60])
+
+    if workload == 'full_test_case_executions':
+        pipelines = np.array([60])
+        stages = np.array([4])
+        executions = np.array([2,3,4,5,6])
+        artifacts = np.array([6])
+        artifact_sizes = np.array([60]) 
+
+    if workload == 'full_test_case_artifacts':
+        pipelines = np.array([60])
+        stages = np.array([4])
+        executions = np.array([4])
+        artifacts = np.array([2,4,6,8,10])
+        artifact_sizes = np.array([60])  
+
+    if workload == 'full_test_case_artifact_sizes':
+        pipelines = np.array([60])
+        stages = np.array([4])
+        executions = np.array([4])
+        artifacts = np.array([6])
+        artifact_sizes = np.array([20,40,60,80,100])  
+
+    if workload == 'full_test_case_min':
+        #2x2x2x2x2 = 32 values
+        pipelines = np.array([1,2])
+        stages = np.array([1,2])
+        executions = np.array([1,2])
+        artifacts = np.array([1,2])
+        artifact_sizes = np.array([1,2])  
+
     if workload == 'test_case_pipelines':
         pipelines = np.array([10,20,30,40,50,60,70,80,90,100])
         stages = np.array([4])
         executions = np.array([4])
         artifacts = np.array([6])
         artifact_sizes = np.array([10])
+    
+    if workload == 'test_case_pipelines_3':
+        pipelines = np.array([50,60,70,80,90,100,110,120])
+        stages = np.array([4])
+        executions = np.array([4])
+        artifacts = np.array([6])
+        artifact_sizes = np.array([10])
+
+    if workload == 'test_case_artifact_sizes_2':
+        pipelines = np.array([50])
+        stages = np.array([4])
+        executions = np.array([4])
+        artifacts = np.array([6])
+        artifact_sizes = np.array([10,20,30,40,50,60,70,80,90,100])  
+
+
+
 
     if workload == 'test_case_stages':
         pipelines = np.array([50])
@@ -200,9 +261,9 @@ def generate_workload_configuration(workload: str):
     print("Configurations shape:", configurations.shape)
     return configurations, pipelines, stages, executions, artifacts, artifact_sizes
 
-def benchmark_tracker(workload:str,configuration:np.array,i:int,j:int,k:int,l:int,m:int):
+def benchmark_tracker(workload:str,workload_tracker_file_path:str,configuration:np.array,i:int,j:int,k:int,l:int,m:int):
     #if the 
-    workload_tracker=np.load(f"{workload}_tracker.npy")
+    workload_tracker=np.load(workload_tracker_file_path)
     print("current value",workload_tracker[i,j,k,l,m])
     if workload_tracker[i,j,k,l,m]==1:
         return True
@@ -225,9 +286,13 @@ def automation(workload: str):
 
     configuration,pipelines, stages,executions,artifacts,artifact_sizes = generate_workload_configuration(workload)
     #create a workload benchmark tracker if none is present
+    workload_tracker_path=f"workload_tracker"
+    os.makedirs(workload_tracker_path, exist_ok=True)
     workload_tracker_file = f"{workload}_tracker.npy"
-    if not os.path.exists(workload_tracker_file):
-        np.save(workload_tracker_file, configuration)
+    workload_tracker_file_path= os.path.join(workload_tracker_path,workload_tracker_file)
+    print(workload_tracker_file_path)
+    if not os.path.exists(workload_tracker_file_path):
+        np.save(workload_tracker_file_path , configuration)
     #create workload benchmark tracker log folder
     parent_log_dir= "logs"
     workload_log_name = f"{workload}_logs"
@@ -239,7 +304,7 @@ def automation(workload: str):
             for k, e in enumerate(executions):
                 for l, a in enumerate(artifacts):
                     for m, size in enumerate(artifact_sizes):
-                        if benchmark_tracker(workload,configuration,i,j,k,l,m):
+                        if benchmark_tracker(workload,workload_tracker_file_path,configuration,i,j,k,l,m):
                             #print(f"configuration:{i,j,k,l,m}",f"Skipping: {p,s,e,a,size}")
                             continue     
                         else:
@@ -247,14 +312,22 @@ def automation(workload: str):
                             test_config_file = 'config.yaml'
                             cluster_config_file = 'cluster.yaml'
                             log_files_name = f"pipeline{p}_stages{s}_executions{e}_aritifacts{a}_size{size}"
-                            log_files_dir = os.path.join(workload_log_dir, log_files_name)
-                            os.makedirs(log_files_dir, exist_ok=True)
+                            #log_files_dir = os.path.join(workload_log_dir, log_files_name)
+                            log_files_dir_pull= os.path.join(workload_log_dir, f"pull_{log_files_name}")
+                            log_files_dir_push= os.path.join(workload_log_dir, f"push_{log_files_name}")
+                            log_files_dir_merge= os.path.join(workload_log_dir, f"merge_{log_files_name}")
+
+                            os.makedirs(log_files_dir_pull, exist_ok=True)
+                            os.makedirs(log_files_dir_push, exist_ok=True)
+                            os.makedirs(log_files_dir_merge, exist_ok=True)
                             #print("test:",p,s,e,a,size)
                             creat_config_file(test_config_file,p,s,e,a,size)
-                            benchmark(test_config_file=test_config_file,cluster_config_file=cluster_config_file,parent_log_dir=log_files_dir) 
-                            workload_tracker=np.load(f"{workload}_tracker.npy")
+                            benchmark_push(test_config_file=test_config_file,cluster_config_file=cluster_config_file,parent_log_dir=log_files_dir_push) 
+                            benchmark_pull(test_config_file=test_config_file,cluster_config_file=cluster_config_file,parent_log_dir=log_files_dir_pull) 
+                            benchmark_merge(test_config_file=test_config_file,cluster_config_file=cluster_config_file,parent_log_dir=log_files_dir_merge) 
+                            workload_tracker=np.load(workload_tracker_file_path)
                             workload_tracker[i,j,k,l,m]=1
-                            np.save(f"{workload}_tracker.npy",workload_tracker)
+                            np.save(workload_tracker_file_path,workload_tracker)
 
                   
 

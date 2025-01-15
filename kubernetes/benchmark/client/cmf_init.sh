@@ -1,5 +1,5 @@
 #!/bin/bash
-#configure the below environment parameters of your own
+#input user enviornment parameters
 export CMF_SERVER_IP=
 export MINIO_IP=
 export MINIO_USER=

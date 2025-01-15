@@ -210,6 +210,20 @@ class KubernetesCluster:
             print(f"Waiting for {remaining_pods} terminating pods to be removed...")
             time.sleep(2)
         print(f"Deployment {self.deployment_name} removal complete.")
+        
+        pods = self.core_v1.list_namespaced_pod(self.namespace)
+        if not pods.items:
+            print(f"No pods found in namespace: {self.namespace}")
+            return
+
+        # Delete all pods
+        for pod in pods.items:
+            pod_name = pod.metadata.name
+            print(f"Deleting pod: {pod_name}")
+            self.apps_v1.delete_namespaced_pod(name=pod_name, namespace=self.namespace)
+
+        print(f"All pods in namespace '{self.namespace}' have been deleted.")
+        
         time.sleep(5)
 
 
