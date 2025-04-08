@@ -9,7 +9,7 @@ This branch helps user to use k3s for cmf deployment and other supplyment servic
 
 
 ### Install CMF server/neo4j/minio using script.
-CMF server image is not publicly available in docker.io. Thus a private docker registry is used for the Kubernetes to pull image and create container.
+A private docker registry is used for the Kubernetes to pull image and create container.
 ```bash
 export MYIP= {IP}    #fill your IP address
 sh setup_script.sh
