@@ -20,7 +20,8 @@ In common cases, k3s has trarif as default loadbalancer where port 80 is binded.
 
 User can use the automation script to create the images:
 ```bash
-sh cmf/kubernetes/docker/create-docker-image-for-k3s.sh
+cd cmf
+sh kubernetes/docker/create-docker-image-for-k3s.sh
 ```
 
 
@@ -49,11 +50,11 @@ CMF server maintains database of metadata. Below is an example to create stroage
 
 create persistent volume:
 ```bash
-kubectl apply -f cmf/kubernetes/server/cmfserver-pv.yaml
+kubectl apply -f kubernetes/server/cmfserver-pv.yaml
 ```
 claim storage volume:
 ```bash
-kubectl apply -f cmf/kubernetes/server/cmfserver-pvc.yaml
+kubectl apply -f kubernetes/server/cmfserver-pvc.yaml
 ```
 Then we can start the deployment of cmf-server and cmf-ui:
 ```bash
