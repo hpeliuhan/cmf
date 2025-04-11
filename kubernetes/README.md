@@ -40,8 +40,8 @@ docker push localhost:5000/cmf-server:latest
 
 Tag and push the cmf-ui image to the local docker registry:
 ```bash
-docker tag server:latest localhost:5000/cmf-server:latest
-docker push localhost:5000/cmf-server:latest
+docker tag ui:latest localhost:5000/cmf-ui:latest
+docker push localhost:5000/cmf-ui:latest
 ```
 
 ### Kubernetes deployment files
@@ -64,7 +64,7 @@ kubectl apply -f kubernetes/server/cmf-deployment.yaml
 ### minio
 CMF server uses thrid part object storage to store artifacts. Taking minio as an example:
 ```bash
-kubectl apply -f kubernetes/minio/aws.yaml
+kubectl apply -f kubernetes/minio/minio.yaml
 ```
 
 ### neo4j
