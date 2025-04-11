@@ -81,6 +81,10 @@ kubectl apply -f kubernetes/neo4j/neo4j.yaml
 ```
 
 ## Accessing services
+Assume cluster external-ip is {IP}
+
 To access the cmf-ui: http://{IP}:3000
+
 To access the neo4j server: http://{IP}:7474
+
 To access the minio server: http://{IP}:9000
