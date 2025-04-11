@@ -21,7 +21,7 @@ In common cases, k3s has trarif as default loadbalancer where port 80 is binded.
 User can use the automation script to create the images:
 ```bash
 cd cmf
-sh kubernetes/docker/create-docker-image-for-k3s.sh
+bash kubernetes/docker/create-docker-image-for-k3s.sh
 ```
 
 
