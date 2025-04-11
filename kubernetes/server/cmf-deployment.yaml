@@ -19,7 +19,7 @@ spec:
         - containerPort: 8080 # CMF server port
         env:
         - name: MYIP
-          value: "192.168.30.116"
+          value: ""
         volumeMounts:
         - mountPath: /cmf-server/data
           name: server-data
@@ -41,7 +41,7 @@ spec:
         # Add resources and volume mounts if needed
         env:
         - name: REACT_APP_MY_IP
-          value: "192.168.30.116"
+          value: ""
         - name: REACT_APP_MY_HOSTNAME
           value: ""
       volumes:
