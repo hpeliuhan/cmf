@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cmf-client-deployment
+spec:
+  replicas: 1  # Start with 1 replica, adjust for scaling
+  selector:
+    matchLabels:
+      app: cmf-client
+  template:
+    metadata:
+      labels:
+        app: cmf-client
+    spec:
+      containers:
+      - name: cmf-client
+        image: desganian/cmf-client:0.1.1
+        volumeMounts:
+        - mountPath: "/app"  # Inside container mount path
+          name: dvc-repo
+      volumes:
+      - name: dvc-repo
+        emptyDir: {}
