@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cmf-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cmf-app
+  template:
+    metadata:
+      labels:
+        app: cmf-app
+    spec:
+      containers:
+      # cmf-server container
+      - name: cmf-server
+        image: desganian/cmf-server:0.1.1
+        env:
+        - name: MYIP
+          value: "postgres"
+        - name: HOSTNAME
+          value: "localhost"
+        - name: POSTGRES_HOST
+          value: "postgres"
+        - name: POSTGRES_USER
+          value: "myuser"
+        - name: POSTGRES_PASSWORD
+          value: "mypassword"
+        - name: POSTGRES_DB
+          value: "mlmd"
+        ports:
+        - containerPort: 8000
+        command: ["sh", "-c", "uvicorn server.app.main:app --host 0.0.0.0 --port 8000"]
+        volumeMounts:
+        - name: server-data
+          mountPath: /cmf-server/data
+        - name: server-static
+          mountPath: /cmf-server/data/static
+      # cmf-ui container
+      - name: cmf-ui
+        image: desganian/cmf-server-ui:0.1.1
+        env:
+        - name: REACT_APP_MY_IP
+          value: "localhost"  # Use the cmf-server service name
+        - name: REACT_APP_MY_HOSTNAME
+          value: "localhost"
+        command: ["sh", "-c", "env && npm start"]
+        #command: ["tail", "-f", "/dev/null"]
+        ports:
+        - containerPort: 3000
+      volumes:
+      - name: server-data
+        persistentVolumeClaim:
+          claimName: server-data-pvc
+      - name: server-static
+        persistentVolumeClaim:
+          claimName: server-static-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cmf-service
+spec:
+  type: LoadBalancer
+  ports:
+  - name: cmf-server
+    port: 8000 # External port for CMF Server access
+    targetPort: 8000 # CMF server container port
+  - name: cmf-ui
+    port: 3000 # External port for CMF UI access
+    targetPort: 3000 # CMF UI container port
+  selector:
+    app: cmf-app
