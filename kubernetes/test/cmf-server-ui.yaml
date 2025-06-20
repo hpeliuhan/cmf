@@ -1,16 +1,16 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: cmf-app
+  name: cmf-server-deployment
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: cmf-app
+      app: cmf-server-deployment
   template:
     metadata:
       labels:
-        app: cmf-app
+        app: cmf-server-deployment
     spec:
       containers:
       # cmf-server container
@@ -71,4 +71,84 @@ spec:
     port: 3000 # External port for CMF UI access
     targetPort: 3000 # CMF UI container port
   selector:
-    app: cmf-app
+    app: cmf-server-deployment
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-server-data
+spec:
+  capacity:
+    storage: 40Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  hostPath:
+    path: "/mnt/cmf/data" 
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: server-data-pvc
+spec:
+  storageClassName: ""
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 40Gi
+  volumeName: pv-server-data  # Bind to the specific PV
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-server-static
+spec:
+  capacity:
+    storage: 20Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  hostPath:
+    path: "/mnt/cmf/data/static"  
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: server-static-pvc
+spec:
+  storageClassName: ""
+  accessModes:    
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+  volumeName: pv-server-static  # Bind to the specific PV
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-tensorboard-logs
+spec:
+  capacity:
+    storage: 20Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  hostPath:
+    path: "/mnt/cmf/data/tensorboard-logs"  
+ 
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:     
+  name: tensorboard-logs-pvc
+spec:
+  storageClassName: ""
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+  volumeName: pv-tensorboard-logs  # Bind to the specific PV
