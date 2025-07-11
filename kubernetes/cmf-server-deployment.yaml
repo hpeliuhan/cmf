@@ -1,0 +1,227 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cmf-server-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cmf-server-deployment
+  template:
+    metadata:
+      labels:
+        app: cmf-server-deployment
+    spec:
+      containers:
+      # PostgreSQL container
+      - name: postgres
+        image: postgres:13
+        env:
+        - name: POSTGRES_HOST_AUTH_METHOD
+          value: "trust"
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_USER
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_PASSWORD
+        - name: POSTGRES_DB
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_DB
+        ports:
+        - containerPort: 5432
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data
+        - name: db-init-sql
+          mountPath: /docker-entrypoint-initdb.d/db_init.sql
+          subPath: db_init.sql
+        - name: custom-entrypoint
+          mountPath: /custom-entrypoint.sh
+          subPath: custom-entrypoint.sh
+        livenessProbe:
+          exec:
+            command: ["pg_isready", "-d", "mlmd", "-U", "myuser"]
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        command: ["/bin/bash", "/custom-entrypoint.sh"]
+
+      # cmf-server container
+      - name: cmf-server
+        image: desganian/cmf-server:0.1.2
+        env:
+        - name: MYIP
+          value: "localhost"  # PostgreSQL is now accessible via localhost
+        - name: HOSTNAME
+          value: "localhost"
+        - name: POSTGRES_HOST
+          value: "localhost"  # PostgreSQL is running in the same pod
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_USER
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_PASSWORD
+        - name: POSTGRES_DB
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_DB
+            
+        ports:
+        - containerPort: 8000
+        command: ["sh", "-c", "uvicorn server.app.main:app --host 0.0.0.0 --port 8000"]
+        volumeMounts:
+        - name: server-data
+          mountPath: /cmf-server/data
+        - name: server-static
+          mountPath: /cmf-server/data/static
+
+      # cmf-ui container
+      - name: cmf-ui
+        image: desganian/cmf-server-ui:0.1.2
+        env:
+        - name: REACT_APP_MY_IP
+          value: ""  
+        - name: REACT_APP_MY_HOSTNAME
+          value: "cmf-server.local"
+        - name: REACT_APP_API_PROTOCOL
+          valueFrom:
+            configMapKeyRef:
+              name: cmf-ui-config
+              key: REACT_APP_API_PROTOCOL
+        - name: REACT_APP_API_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: cmf-ui-config
+              key: REACT_APP_API_PORT
+        command: ["sh", "-c", "env && npm start"]
+        ports:
+        - containerPort: 3000
+
+      volumes:
+      - name: postgres-data
+        persistentVolumeClaim:
+          claimName: postgres-pvc
+      - name: db-init-sql
+        configMap:
+          name: db-init-sql-config
+          items:
+            - key: db_init.sql
+              path: db_init.sql
+      - name: custom-entrypoint
+        configMap:
+          name: custom-entrypoint-config
+          items:
+            - key: custom-entrypoint.sh
+              path: custom-entrypoint.sh
+      - name: server-data
+        persistentVolumeClaim:
+          claimName: server-data-pvc
+      - name: server-static
+        persistentVolumeClaim:
+          claimName: server-static-pvc
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-postgres-data
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  hostPath:
+    path: "/home/ubuntu/data/postgres_data"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+spec:
+  storageClassName: ""
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  volumeName: pv-postgres-data
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-server-data
+spec:
+  capacity:
+    storage: 40Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  hostPath:
+    path: "/home/ubuntu/data"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: server-data-pvc
+spec:
+  storageClassName: ""
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 40Gi
+  volumeName: pv-server-data
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-server-static
+spec:
+  capacity:
+    storage: 20Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  hostPath:
+    path: "/home/ubuntu/data/static"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: server-static-pvc
+spec:
+  storageClassName: ""
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+  volumeName: pv-server-static
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cmf-service
+spec:
+  type: LoadBalancer
+  ports:
+  - name: cmf-server
+    port: 8000
+    targetPort: 8000
+  - name: cmf-ui
+    port: 3000
+    targetPort: 3000
+  selector:
+    app: cmf-server-deployment

@@ -1,0 +1,9 @@
+FROM postgres:13
+
+# Copy initialization script to the container
+COPY init.sql /docker-entrypoint-initdb.d/init.sql
+
+# Set environment variables for PostgreSQL
+ENV POSTGRES_USER=post_admin
+ENV POSTGRES_PASSWORD=password1234
+ENV POSTGRES_DB=mlmd
