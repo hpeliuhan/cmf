@@ -1,0 +1,174 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: aim-repo-pvc
+  namespace: aim
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aim-server
+  namespace: aim
+  labels:
+    app: aim-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aim-server
+  template:
+    metadata:
+      labels:
+        app: aim-server
+    spec:
+      initContainers:
+      - name: wait-for-postgres
+        image: busybox:1.28
+        command: ['sh', '-c', 'until nc -z postgres 5432; do echo waiting for postgres; sleep 2; done;']
+      - name: wait-for-minio
+        image: busybox:1.28
+        command: ['sh', '-c', 'until nc -z minio 9000; do echo waiting for minio; sleep 2; done;']
+      - name: create-bucket
+        image: minio/mc:latest
+        env:
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: aim-secrets
+              key: AWS_ACCESS_KEY_ID
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: aim-secrets
+              key: AWS_SECRET_ACCESS_KEY
+        command:
+        - /bin/sh
+        - -c
+        - |
+          mc alias set myminio http://minio:9000 $AWS_ACCESS_KEY_ID $AWS_SECRET_ACCESS_KEY
+          mc mb myminio/aim-artifacts --ignore-existing
+          echo "Bucket creation completed"
+      - name: init-aim-repo
+        image: python:3.9-slim
+        command:
+        - /bin/bash
+        - -c
+        - |
+          pip install aim
+          cd /aim-repo
+          if [ ! -f ".aim/config.json" ]; then
+            aim init -y
+            echo "AIM repository initialized"
+          else
+            echo "AIM repository already exists"
+          fi
+        volumeMounts:
+        - name: aim-repo-storage
+          mountPath: /aim-repo
+      containers:
+      - name: aim-server
+        image: python:3.9-slim
+        ports:
+        - containerPort: 43800
+          name: aim-server
+        - containerPort: 43801
+          name: aim-web
+        env:
+        - name: AIM_REPO_PATH
+          valueFrom:
+            configMapKeyRef:
+              name: aim-config
+              key: AIM_REPO_PATH
+        - name: AIM_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: aim-config
+              key: AIM_HOST
+        - name: AIM_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: aim-config
+              key: AIM_PORT
+        - name: AIM_WEB_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: aim-config
+              key: AIM_WEB_PORT
+        - name: AWS_S3_ENDPOINT_URL
+          value: "http://minio:9000"
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: aim-secrets
+              key: AWS_ACCESS_KEY_ID
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: aim-secrets
+              key: AWS_SECRET_ACCESS_KEY
+        - name: AWS_REGION
+          valueFrom:
+            configMapKeyRef:
+              name: aim-config
+              key: AWS_REGION
+        command:
+        - /bin/bash
+        - -c
+        - |
+          pip install aim[remote] boto3
+          cd $AIM_REPO_PATH
+          # Start AIM server and web UI
+          aim server --host $AIM_HOST --port $AIM_PORT &
+          aim up --host $AIM_HOST --port $AIM_WEB_PORT --repo $AIM_REPO_PATH
+        volumeMounts:
+        - name: aim-repo-storage
+          mountPath: /aim-repo
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 43801
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 43801
+          initialDelaySeconds: 120
+          periodSeconds: 30
+          timeoutSeconds: 5
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+      volumes:
+      - name: aim-repo-storage
+        persistentVolumeClaim:
+          claimName: aim-repo-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aim-server
+  namespace: aim
+spec:
+  selector:
+    app: aim-server
+  ports:
+  - name: aim-server
+    port: 43800
+    targetPort: 43800
+  - name: aim-web
+    port: 43801
+    targetPort: 43801
+  type: ClusterIP

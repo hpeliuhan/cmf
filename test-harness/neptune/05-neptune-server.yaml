@@ -1,0 +1,211 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: neptune-storage-pvc
+  namespace: neptune
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: neptune-server
+  namespace: neptune
+  labels:
+    app: neptune-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: neptune-server
+  template:
+    metadata:
+      labels:
+        app: neptune-server
+    spec:
+      initContainers:
+      - name: wait-for-postgres
+        image: busybox:1.28
+        command: ['sh', '-c', 'until nc -z postgres 5432; do echo waiting for postgres; sleep 2; done;']
+      - name: wait-for-redis
+        image: busybox:1.28
+        command: ['sh', '-c', 'until nc -z redis 6379; do echo waiting for redis; sleep 2; done;']
+      - name: wait-for-minio
+        image: busybox:1.28
+        command: ['sh', '-c', 'until nc -z minio 9000; do echo waiting for minio; sleep 2; done;']
+      - name: create-bucket
+        image: minio/mc:latest
+        env:
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: neptune-secrets
+              key: AWS_ACCESS_KEY_ID
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: neptune-secrets
+              key: AWS_SECRET_ACCESS_KEY
+        command:
+        - /bin/sh
+        - -c
+        - |
+          mc alias set myminio http://minio:9000 $AWS_ACCESS_KEY_ID $AWS_SECRET_ACCESS_KEY
+          mc mb myminio/neptune-artifacts --ignore-existing
+          echo "Bucket creation completed"
+      containers:
+      - name: neptune-server
+        image: python:3.9-slim
+        ports:
+        - containerPort: 5000
+        env:
+        - name: NEPTUNE_BACKEND_STORAGE_PATH
+          valueFrom:
+            configMapKeyRef:
+              name: neptune-config
+              key: NEPTUNE_BACKEND_STORAGE_PATH
+        - name: POSTGRES_HOST
+          value: "postgres"
+        - name: POSTGRES_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: neptune-config
+              key: POSTGRES_PORT
+        - name: POSTGRES_USER
+          valueFrom:
+            configMapKeyRef:
+              name: neptune-config
+              key: POSTGRES_USER
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: neptune-secrets
+              key: POSTGRES_PASSWORD
+        - name: POSTGRES_DB
+          valueFrom:
+            configMapKeyRef:
+              name: neptune-config
+              key: POSTGRES_DB
+        - name: REDIS_HOST
+          value: "redis"
+        - name: REDIS_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: neptune-config
+              key: REDIS_PORT
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: neptune-secrets
+              key: REDIS_PASSWORD
+        - name: AWS_S3_ENDPOINT_URL
+          value: "http://minio:9000"
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: neptune-secrets
+              key: AWS_ACCESS_KEY_ID
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: neptune-secrets
+              key: AWS_SECRET_ACCESS_KEY
+        - name: AWS_REGION
+          valueFrom:
+            configMapKeyRef:
+              name: neptune-config
+              key: AWS_REGION
+        - name: NEPTUNE_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: neptune-secrets
+              key: NEPTUNE_API_TOKEN
+              optional: true
+        command:
+        - /bin/bash
+        - -c
+        - |
+          pip install neptune-client neptune-fastapi psycopg2-binary redis boto3 fastapi uvicorn
+          # Create a simple Neptune-compatible metadata server
+          cat > /app/main.py << 'EOF'
+          from fastapi import FastAPI
+          from fastapi.middleware.cors import CORSMiddleware
+          import uvicorn
+          import os
+          
+          app = FastAPI(title="Neptune Metadata Server", version="1.0.0")
+          
+          app.add_middleware(
+              CORSMiddleware,
+              allow_origins=["*"],
+              allow_credentials=True,
+              allow_methods=["*"],
+              allow_headers=["*"],
+          )
+          
+          @app.get("/health")
+          async def health():
+              return {"status": "healthy"}
+          
+          @app.get("/")
+          async def root():
+              return {"message": "Neptune Metadata Server", "version": "1.0.0"}
+          
+          @app.get("/api/v1/projects")
+          async def list_projects():
+              return {"projects": []}
+          
+          @app.get("/api/v1/experiments")
+          async def list_experiments():
+              return {"experiments": []}
+          
+          if __name__ == "__main__":
+              uvicorn.run(app, host="0.0.0.0", port=5000)
+          EOF
+          python /app/main.py
+        volumeMounts:
+        - name: neptune-storage
+          mountPath: /neptune-storage
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 120
+          periodSeconds: 30
+          timeoutSeconds: 5
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+      volumes:
+      - name: neptune-storage
+        persistentVolumeClaim:
+          claimName: neptune-storage-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: neptune-server
+  namespace: neptune
+spec:
+  selector:
+    app: neptune-server
+  ports:
+  - port: 5000
+    targetPort: 5000
+  type: ClusterIP

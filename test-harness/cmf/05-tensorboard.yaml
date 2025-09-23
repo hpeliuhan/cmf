@@ -1,0 +1,73 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: tensorboard-pvc
+  namespace: cmf
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tensorboard
+  namespace: cmf
+  labels:
+    app: tensorboard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tensorboard
+  template:
+    metadata:
+      labels:
+        app: tensorboard
+    spec:
+      containers:
+      - name: tensorboard
+        image: tensorflow/tensorflow:latest
+        command:
+        - tensorboard
+        args:
+        - --logdir=/logs
+        - --host=0.0.0.0
+        - --port=6006
+        ports:
+        - containerPort: 6006
+        volumeMounts:
+        - name: tensorboard-logs
+          mountPath: /logs
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 6006
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 6006
+          initialDelaySeconds: 60
+          periodSeconds: 30
+      volumes:
+      - name: tensorboard-logs
+        persistentVolumeClaim:
+          claimName: tensorboard-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tensorboard
+  namespace: cmf
+spec:
+  selector:
+    app: tensorboard
+  ports:
+  - port: 6006
+    targetPort: 6006
+  type: ClusterIP

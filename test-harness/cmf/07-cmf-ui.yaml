@@ -1,0 +1,63 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cmf-ui
+  namespace: cmf
+  labels:
+    app: cmf-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cmf-ui
+  template:
+    metadata:
+      labels:
+        app: cmf-ui
+    spec:
+      initContainers:
+      - name: wait-for-cmf-server
+        image: busybox:1.28
+        command: ['sh', '-c', 'until nc -z cmf-server 8000; do echo waiting for cmf-server; sleep 2; done;']
+      containers:
+      - name: cmf-ui
+        image: ui:latest
+        ports:
+        - containerPort: 3000
+        env:
+        - name: REACT_APP_MY_IP
+          valueFrom:
+            configMapKeyRef:
+              name: cmf-config
+              key: MYIP
+        - name: REACT_APP_MY_HOSTNAME
+          valueFrom:
+            configMapKeyRef:
+              name: cmf-config
+              key: HOSTNAME
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 60
+          periodSeconds: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cmf-ui
+  namespace: cmf
+spec:
+  selector:
+    app: cmf-ui
+  ports:
+  - port: 3000
+    targetPort: 3000
+  type: ClusterIP

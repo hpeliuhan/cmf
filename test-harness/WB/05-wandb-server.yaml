@@ -1,0 +1,157 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wandb-server
+  namespace: wandb
+  labels:
+    app: wandb-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: wandb-server
+  template:
+    metadata:
+      labels:
+        app: wandb-server
+    spec:
+      initContainers:
+      - name: wait-for-postgres
+        image: busybox:1.28
+        command: ['sh', '-c', 'until nc -z postgres 5432; do echo waiting for postgres; sleep 2; done;']
+      - name: wait-for-redis
+        image: busybox:1.28
+        command: ['sh', '-c', 'until nc -z redis 6379; do echo waiting for redis; sleep 2; done;']
+      - name: wait-for-minio
+        image: busybox:1.28
+        command: ['sh', '-c', 'until nc -z minio 9000; do echo waiting for minio; sleep 2; done;']
+      - name: create-bucket
+        image: minio/mc:latest
+        env:
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: wandb-secrets
+              key: AWS_ACCESS_KEY_ID
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: wandb-secrets
+              key: AWS_SECRET_ACCESS_KEY
+        command:
+        - /bin/sh
+        - -c
+        - |
+          mc alias set myminio http://minio:9000 $AWS_ACCESS_KEY_ID $AWS_SECRET_ACCESS_KEY
+          mc mb myminio/wandb --ignore-existing
+          echo "Bucket creation completed"
+      containers:
+      - name: wandb-server
+        image: wandb/local:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: MYSQL_HOST
+          value: "postgres"
+        - name: MYSQL_PORT
+          value: "5432"
+        - name: MYSQL_DATABASE
+          valueFrom:
+            configMapKeyRef:
+              name: wandb-config
+              key: POSTGRES_DB
+        - name: MYSQL_USER
+          valueFrom:
+            configMapKeyRef:
+              name: wandb-config
+              key: POSTGRES_USER
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: wandb-secrets
+              key: POSTGRES_PASSWORD
+        - name: REDIS_HOST
+          value: "redis"
+        - name: REDIS_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: wandb-config
+              key: REDIS_PORT
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: wandb-secrets
+              key: REDIS_PASSWORD
+        - name: AWS_S3_ENDPOINT_URL
+          value: "http://minio:9000"
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: wandb-secrets
+              key: AWS_ACCESS_KEY_ID
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: wandb-secrets
+              key: AWS_SECRET_ACCESS_KEY
+        - name: BUCKET
+          valueFrom:
+            configMapKeyRef:
+              name: wandb-config
+              key: BUCKET
+        - name: AWS_REGION
+          valueFrom:
+            configMapKeyRef:
+              name: wandb-config
+              key: AWS_REGION
+        - name: HOST
+          valueFrom:
+            configMapKeyRef:
+              name: wandb-config
+              key: WANDB_HOST
+        - name: PORT
+          valueFrom:
+            configMapKeyRef:
+              name: wandb-config
+              key: WANDB_PORT
+        - name: LICENSE
+          valueFrom:
+            secretKeyRef:
+              name: wandb-secrets
+              key: WANDB_LICENSE
+              optional: true
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 120
+          periodSeconds: 30
+          timeoutSeconds: 5
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wandb-server
+  namespace: wandb
+spec:
+  selector:
+    app: wandb-server
+  ports:
+  - port: 8080
+    targetPort: 8080
+  type: ClusterIP
